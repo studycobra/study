@@ -1,23 +1,27 @@
 <html>
     <head></head>
     <body>
+        <button id="p">paste</button>
         <table>
             <thead>
                 <tr><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th></tr>
             </thead>
             <tbody class="area-focus-move">
-                <tr><td><input type="text" class='cmt cmt_1'></td><td><input type="text" class='cmt cmt_2'></td><td>1</td><td><input type="text" class='cmt cmt_3'></td><td><input type="text" class='cmt cmt_4' disabled></td></tr>
-                <tr><td><input type="text" class='cmt cmt_1'></td><td><input type="text" class='cmt cmt_2'></td><td>2</td><td><input type="text" class='cmt cmt_3'></td><td><input type="text" class='cmt cmt_4'></td></tr>
-                <tr><td><input type="text" class='cmt cmt_1'></td><td><input type="text" class='cmt cmt_2'></td><td>3</td><td><input type="text" class='cmt cmt_3'></td><td><input type="text" class='cmt cmt_4'></td></tr>
-                <tr><td><input type="text" class='cmt cmt_1'></td><td><input type="text" class='cmt cmt_2'></td><td>4</td><td><input type="text" class='cmt cmt_3'></td><td><input type="text" class='cmt cmt_4'></td></tr>
-                <tr><td><input type="text" class='cmt cmt_1'></td><td><input type="text" class='cmt cmt_2' disabled></td><td>5</td><td><input type="text" class='cmt cmt_3'></td><td><input type="text" class='cmt cmt_4'></td></tr>
-                <tr><td><input type="text" class='cmt cmt_1'></td><td><input type="text" class='cmt cmt_2'></td><td>6</td><td><input type="text" class='cmt cmt_3' disabled></td><td><input type="text" class='cmt cmt_4'></td></tr>
+                <tr class="cmt_row"><td><input type="text" class='cmt cmt_1'></td><td><input type="text" class='cmt cmt_2'></td><td>1</td><td><input type="text" class='cmt cmt_3'></td><td><input type="text" class='cmt cmt_4' disabled></td></tr>
+                <tr class="cmt_row"><td><input type="text" class='cmt cmt_1'></td><td><input type="text" class='cmt cmt_2'></td><td>2</td><td><input type="text" class='cmt cmt_3'></td><td><input type="text" class='cmt cmt_4'></td></tr>
+                <tr class="cmt_row"><td><input type="text" class='cmt cmt_1'></td><td><input type="text" class='cmt cmt_2'></td><td>3</td><td><input type="text" class='cmt cmt_3'></td><td><input type="text" class='cmt cmt_4'></td></tr>
+                <tr class="cmt_row"><td><input type="text" class='cmt cmt_1'></td><td><input type="text" class='cmt cmt_2'></td><td>4</td><td><input type="text" class='cmt cmt_3'></td><td><input type="text" class='cmt cmt_4'></td></tr>
+                <tr class="cmt_row"><td><input type="text" class='cmt cmt_1'></td><td><input type="text" class='cmt cmt_2' disabled></td><td>5</td><td><input type="text" class='cmt cmt_3'></td><td><input type="text" class='cmt cmt_4'></td></tr>
+                <tr class="cmt_row"><td><input type="text" class='cmt cmt_1'></td><td><input type="text" class='cmt cmt_2'></td><td>6</td><td><input type="text" class='cmt cmt_3' disabled></td><td><input type="text" class='cmt cmt_4'></td></tr>
             </tbody>
         </table>
         <script src="jquery-3.3.1.min.js"></script>
         <script>
 $(function(){
-  window.bmf = new BindMoveFocusByKey('.area-focus-move');
+  var bmf = new BindMoveFocusByKey('.area-focus-move');
+  $('#p').click(function(){
+      bmf.paste();
+  });
 });
 
 function BindMoveFocusByKey(selector) {
@@ -29,25 +33,58 @@ function BindMoveFocusByKey(selector) {
         area.find('.cmt').keydown(function(e) {
             if (e.keyCode !== 38 && e.keyCode !== 40) return;
             var input = $(this);
-            var nextObj = getNextObj(e.keyCode === 38 ? 'up' : 'down', input, getColObj(input));
+            var nextObj = getNextObj(e.keyCode === 38 ? 'up' : 'down', input, getColObj(input), true);
             if (nextObj !== null) nextObj.focus();
         });
         area.find('.cmt').focus(function(e) {
             setTimeout(function(){$(this).select()}.bind(this), 1);
         });
-        $('button').is(':disabled');
+        area.find('.cmt').on('paste', function(e){
+            e.preventDefault();
+            e.stopPropagation();
+            paste($(this), getClipboardData(e));
+        });
+
     }
 
-　　// 移動先のjquery Objを得る
-    function getNextObj(upDown, curObj, colObj) {
+    function paste(obj, pasteData) {
+        var colObj = getColObj(obj);
+        for (var i = 0; i < pasteData.length; i++) {
+            var rowCols = obj.closest('.cmt_row').find('.cmt');
+            var idx = rowCols.index(obj);
+            for (var j = 0; j < pasteData[i].length; j++) {
+                var col = rowCols.eq(idx++);
+                if (!col.is(':disabled')) col.val(pasteData[i][j]);
+                if (idx > rowCols.length-1) break;
+            }
+            obj = getNextObj('down', obj, colObj);
+            if (obj === null) break;
+        }
+    }
+
+    function getClipboardData(e) {
+        var instance;
+        if (e) instance = (e.originalEvent.clipboardData || window.clipboardData);
+        else instance = (window.clipboardData || null);
+        if (!instance) return null;
+        var text = instance.getData('text');
+        return text.replace(/\r/g, '').split("\n").filter(function(line){
+            return line !== '';
+        }).map(function(line){
+            return line.split("\t");
+        });
+    }
+
+    // 移動先のjquery Objを得る
+    function getNextObj(upDown, curObj, colObj, skipDisabled) {
         var fromIdx = colObj.index(curObj);
         var gain = 0;
         if (upDown === 'up' && fromIdx > 0) gain = -1;
         else if (upDown === 'down' && fromIdx < colObj.length - 1) gain = 1;
         if (gain === 0) return null;
         var next = colObj.eq(fromIdx + gain);
-        if (next.is(':disabled')) {
-            return getNextObj(upDown, next, colObj);
+        if (skipDisabled && next.is(':disabled')) {
+            return getNextObj(upDown, next, colObj, ignoreDisabled);
         }
         return next;
     }
@@ -71,6 +108,12 @@ function BindMoveFocusByKey(selector) {
     this.rebind = function() {
       cache = {};
     };
+    this.paste = function() {
+        var clipboardData = getClipboardData();
+        var first = area.find('.cmt:first');
+        if (clipboardData === null || !first.length) return;
+        paste(first, clipboardData);
+    }
 }
         </script>
     </body>
