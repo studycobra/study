@@ -1,120 +1,195 @@
-<html>
-    <head></head>
-    <body>
-        <button id="p">paste</button>
-        <table>
-            <thead>
-                <tr><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th></tr>
-            </thead>
-            <tbody class="area-focus-move">
-                <tr class="cmt_row"><td><input type="text" class='cmt cmt_1'></td><td><input type="text" class='cmt cmt_2'></td><td>1</td><td><input type="text" class='cmt cmt_3'></td><td><input type="text" class='cmt cmt_4' disabled></td></tr>
-                <tr class="cmt_row"><td><input type="text" class='cmt cmt_1'></td><td><input type="text" class='cmt cmt_2'></td><td>2</td><td><input type="text" class='cmt cmt_3'></td><td><input type="text" class='cmt cmt_4'></td></tr>
-                <tr class="cmt_row"><td><input type="text" class='cmt cmt_1'></td><td><input type="text" class='cmt cmt_2'></td><td>3</td><td><input type="text" class='cmt cmt_3'></td><td><input type="text" class='cmt cmt_4'></td></tr>
-                <tr class="cmt_row"><td><input type="text" class='cmt cmt_1'></td><td><input type="text" class='cmt cmt_2'></td><td>4</td><td><input type="text" class='cmt cmt_3'></td><td><input type="text" class='cmt cmt_4'></td></tr>
-                <tr class="cmt_row"><td><input type="text" class='cmt cmt_1'></td><td><input type="text" class='cmt cmt_2' disabled></td><td>5</td><td><input type="text" class='cmt cmt_3'></td><td><input type="text" class='cmt cmt_4'></td></tr>
-                <tr class="cmt_row"><td><input type="text" class='cmt cmt_1'></td><td><input type="text" class='cmt cmt_2'></td><td>6</td><td><input type="text" class='cmt cmt_3' disabled></td><td><input type="text" class='cmt cmt_4'></td></tr>
-            </tbody>
-        </table>
-        <script src="jquery-3.3.1.min.js"></script>
-        <script>
-$(function(){
-  var bmf = new BindMoveFocusByKey('.area-focus-move');
-  $('#p').click(function(){
-      bmf.paste();
-  });
-});
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
 
-function BindMoveFocusByKey(selector) {
-    var area = $(selector);
-    init();
-
-    // 初期処理
-    function init() {
-        area.find('.cmt').keydown(function(e) {
-            if (e.keyCode !== 38 && e.keyCode !== 40) return;
-            var input = $(this);
-            var nextObj = getNextObj(e.keyCode === 38 ? 'up' : 'down', input, getColObj(input), true);
-            if (nextObj !== null) nextObj.focus();
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+    <style>
+      body {
+        background-color: #242424;
+      }
+      #header {
+        border-top: solid 3px rgba(255,255,255,0.3);
+        border-bottom: solid 2px rgba(0,0,0,0.2);
+        height: 55px;
+        margin-bottom: 5px;
+      }
+      #title{
+        text-align: center;
+        z-index: 200;
+        width: 100%;
+      }
+      #title.fixed{
+        position: fixed;
+      }
+      #title svg{
+        display: inline-block;
+      }
+      .label{
+        font-size: 18px; fill: #888;
+      }
+      .event-label{
+        font-size: 12px; fill: #ccc;
+      }
+    </style>
+</head>
+<body>
+  <div id="header">
+    <div style="width:400px; padding:10px 0px" class="center-block">
+      <div class="input-group" style="margin:0px 0px">
+        <input type="text" class="form-control input-sm" placeholder="件名NO">
+        <span class="input-group-btn">
+          <button class="btn btn-primary btn-sm" type="button" id="btn-search">調査</button>
+        </span>
+      </div>
+    </div>
+  </div>
+  <div id="title"></div>
+  <div id="tree"></div>
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js" integrity="sha256-9/aliU8dGd2tb6OSsuzixeV4y/faTqgFtohetphbbj0=" crossorigin="anonymous"></script>
+    <script src="https://d3js.org/d3.v5.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.26.0/moment.min.js"></script>
+    <script>
+      $(function(){
+        $(window).scroll(function() {
+          if ($(window).scrollTop() > 60) $('#title').addClass('fixed').css('top', 0);
+          else $('#title').removeClass('fixed');
         });
-        area.find('.cmt').focus(function(e) {
-            setTimeout(function(){$(this).select()}.bind(this), 1);
+        $('#btn-search').click(function(){
+          draw();
         });
-        area.find('.cmt').on('paste', function(e){
-            e.preventDefault();
-            e.stopPropagation();
-            paste($(this), getClipboardData(e));
+      });
+
+      var ep = new EditPart();
+      var link = d3.linkVertical().x(function(d){return d.x;}).y(function(d){return d.y;});
+      var title = d3.select('#title').append('svg');
+      
+      var tree = d3.select('#tree').append('svg');
+      tree.attr('class', 'center-block');
+
+
+      function draw() {
+        var data = new Data([
+
+        ]);
+        title.selectAll('.title').remove();
+        tree.selectAll('.lane').remove();
+        var size = ep.getSize(data.get());
+        title.attr('width', size.width).attr('height', 25);
+        tree.attr('width', size.width).attr('height', size.height);
+        data.get().forEach(function(laneData){
+          ep.createTitle(laneData);
+          ep.createLane(laneData, data.getById(laneData.from));
         });
+      }
 
-    }
 
-    function paste(obj, pasteData) {
-        var colObj = getColObj(obj);
-        for (var i = 0; i < pasteData.length; i++) {
-            var rowCols = obj.closest('.cmt_row').find('.cmt');
-            var idx = rowCols.index(obj);
-            for (var j = 0; j < pasteData[i].length; j++) {
-                var col = rowCols.eq(idx++);
-                if (!col.is(':disabled')) col.val(pasteData[i][j]);
-                if (idx > rowCols.length-1) break;
-            }
-            obj = getNextObj('down', obj, colObj);
-            if (obj === null) break;
+
+      function Data(data) {
+        var color = ['#ff251e', '#ff9100', '#ffca00', '#a78354', '#02cc2f', '#ed0092', '#0085e0'];
+        function setOtherData(data) {
+          deleteData(data);
+          setLaneSeqAndColor(data);
+          setHistorySeq(data);
         }
-    }
-
-    function getClipboardData(e) {
-        var instance;
-        if (e) instance = (e.originalEvent.clipboardData || window.clipboardData);
-        else instance = (window.clipboardData || null);
-        if (!instance) return null;
-        var text = instance.getData('text');
-        return text.replace(/\r/g, '').split("\n").filter(function(line){
-            return line !== '';
-        }).map(function(line){
-            return line.split("\t");
-        });
-    }
-
-    // 移動先のjquery Objを得る
-    function getNextObj(upDown, curObj, colObj, skipDisabled) {
-        var fromIdx = colObj.index(curObj);
-        var gain = 0;
-        if (upDown === 'up' && fromIdx > 0) gain = -1;
-        else if (upDown === 'down' && fromIdx < colObj.length - 1) gain = 1;
-        if (gain === 0) return null;
-        var next = colObj.eq(fromIdx + gain);
-        if (skipDisabled && next.is(':disabled')) {
-            return getNextObj(upDown, next, colObj, ignoreDisabled);
+        function deleteData(data) {
+          data = data.filter(function(v){return v.history.length > 0});
         }
-        return next;
-    }
-    // フォーカス制御対象のjquery Objから同じ縦のjquery Objを返却する
-    var cache = {};
-    function getColObj(jobj) {
-      var cls = getClass(jobj);
-      if (!(cls in cache)) cache[cls] = $('.' + cls);
-      return cache[cls];
-    }
+        function setLaneSeqAndColor(data) {
+          var seq = 0;
+          data.forEach(function(v){
+            v.color = color[seq%(color.length)];
+            v.seq = seq++;
+          });
+        }
+        function setHistorySeq(data) {
+          var forSort = [];
+          data.forEach(function(v){
+            v.history.forEach(function(h, i){forSort.push(h);});
+          });
+          forSort.sort(function(a,b){
+            if(a.datetime == b.datetime) return 0;
+            return (a.datetime < b.datetime) ? -1 : 1;
+          });
+          var seq = 0;
+          forSort.forEach(function(v){v.seq = seq++;});
+        }
+        setOtherData(data);
+        this.get = function(){return data};
+        this.getById = function(id){
+          var res = data.filter(function(d){return d.id === id});
+          return res.length > 0 ? res[0] : null;
+        };
+      }
 
-    // フォーカス制御対象のjquery Objからキー操作用のクラス名を返却する。
-    var classRegexp = /cmt_\d+/;
-    function getClass(jobj) {
-        var clses = jobj.attr('class');
-        if (!clses) return '';
-        var cls = clses.match(classRegexp);
-        return cls ? cls[0] : '';
-    }
+      function EditPart() {
+        var laneMargin = 150;
+        var seqHeight = 40;
+        var lavelAdjust = {x: 10, y: 5}
 
-    this.rebind = function() {
-      cache = {};
-    };
-    this.paste = function() {
-        var clipboardData = getClipboardData();
-        var first = area.find('.cmt:first');
-        if (clipboardData === null || !first.length) return;
-        paste(first, clipboardData);
-    }
-}
-        </script>
-    </body>
+        function createLine(lane, laneData, fromLaneData) {
+          var y = seqHeight * (laneData.history[0].seq + (fromLaneData !== null ? 1 : 0));
+          lane.append('line').attr('y1', y).attr('y2', 700)
+          .attr("stroke-width",2).attr("stroke", laneData.color);
+          if (fromLaneData !== null) {
+            var sourceX = laneMargin * (fromLaneData.seq - laneData.seq);
+            var sourceY = seqHeight * laneData.history[0].seq;
+            lane.append('path').attr('fill', 'none').attr("stroke-width",2).attr('stroke', laneData.color)
+              .attr('d', link({source: {x: sourceX, y: sourceY}, target: {x: 0, y: y}}));
+          }
+        }
+
+        function createEvents(lane, laneData, fromLaneData) {
+          var histCnt = 0;
+          laneData.history.forEach(function(h){
+            createEvent(lane, laneData, (histCnt === 0 && fromLaneData !== null) ? fromLaneData : null, h);
+            histCnt++;
+          });
+        }
+
+        function createEvent(lane, laneData, fromLaneData, hist) {
+          var x = laneMargin * ((fromLaneData != null) ? (fromLaneData.seq - laneData.seq) : 0);
+          var y = seqHeight * hist.seq;
+          lane.append('circle').attr('cx', x).attr('cy', y).attr('r', 5)
+            .attr('fill', laneData.color).attr("stroke-width",1).attr("stroke","#242424");
+          var d = moment(new Date());
+          lane.append('text').attr('class', 'event-label').attr('x', x + lavelAdjust.x).attr('y', y + lavelAdjust.y).text(d.format("MM/DD hh:mm:ss"));
+          lane.append('text').attr('class', 'event-label').attr('x', x + lavelAdjust.x).attr('y', y + 15 + lavelAdjust.y).text(hist.title);
+        }
+
+        this.createTitle = function(laneData) {
+          var titleMargin = 2;
+          var x = laneMargin * laneData.seq;
+          var g = title.append('g').attr('class', 'title').attr('transform', 'translate(' + x + ', 0)');
+          g.append('rect').attr('x', titleMargin).attr("width", laneMargin - titleMargin*2).attr('height', 25).attr('fill', 'rgba(65, 65, 65, 0.8)');
+          g.append('text').attr('class', 'label').attr('x', titleMargin + 6).attr('y', 20).text(laneData.title);
+        };
+
+        this.createLane = function(laneData, fromLaneData) {
+          var x = 10 + laneMargin * laneData.seq;
+          var y = 10;
+          var lane = tree.append('g').attr('class', 'lane').attr('transform', 'translate(' + x + ', ' + y + ')');
+          createLine(lane, laneData, fromLaneData);
+          createEvents(lane, laneData, fromLaneData);
+        };
+
+        this.getSize = function(laneDatas) {
+          var forMax = [];
+          laneDatas.forEach(function(laneData){
+            laneData.history.forEach(function(hist){forMax.push(hist.seq);});
+          });
+          return {
+            width: laneDatas.length * laneMargin + 50,
+            height: (forMax.length < 1 ? 0 : Math.max.apply(null, forMax)) * seqHeight
+          };
+        }
+
+      }
+
+    </script>  
+</body>
 </html>
